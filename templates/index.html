@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Ledger - Financial Automation</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="glass-bg"></div>
+    
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i data-lucide="cpu" class="logo-icon"></i>
+                <h2>AI Ledger</h2>
+            </div>
+            
+            <nav class="nav-menu">
+                <button class="nav-item active" onclick="switchTab('dashboard')">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-item" onclick="switchTab('transactions')">
+                    <i data-lucide="list-ordered"></i>
+                    <span>Transactions</span>
+                </button>
+                <button class="nav-item" onclick="switchTab('scanner')">
+                    <i data-lucide="scan-line"></i>
+                    <span>Receipt Parser</span>
+                </button>
+                <button class="nav-item" onclick="switchTab('reports')">
+                    <i data-lucide="file-text"></i>
+                    <span>Statements</span>
+                </button>
+            </nav>
+            
+            <div class="user-profile">
+                <div class="user-avatar">
+                    <i data-lucide="user"></i>
+                </div>
+                <div class="user-info">
+                    <h4 id="user-primary-name">M. Jahanzaib</h4>
+                    <p>Account Owner</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="content-header">
+                <div>
+                    <h1 id="page-title">Financial Dashboard</h1>
+                    <p class="subtitle" id="page-subtitle">Real-time ledger overview & analytics</p>
+                </div>
+                <div class="actions-header">
+                    <button class="btn btn-primary" onclick="openAddTransactionModal()">
+                        <i data-lucide="plus"></i> Add Transaction
+                    </button>
+                    <button class="btn btn-secondary" onclick="triggerClipboardParse()">
+                        <i data-lucide="clipboard-paste"></i> Parse Clipboard
+                    </button>
+                </div>
+            </header>
+
+            <!-- Loading overlay -->
+            <div id="loader" class="loader-container" style="display: none;">
+                <div class="spinner"></div>
+                <p id="loader-text">Analyzing receipt with Gemini...</p>
+            </div>
+
+            <!-- Tab: Dashboard -->
+            <section id="tab-dashboard" class="tab-content active">
+                <!-- KPI Statistics -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-info">
+                            <span class="kpi-label">Total Volume Tracked</span>
+                            <h3 class="kpi-value" id="kpi-total-volume">0.00 PKR</h3>
+                        </div>
+                        <div class="kpi-icon volume">
+                            <i data-lucide="activity"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-info">
+                            <span class="kpi-label">Active Accounts</span>
+                            <h3 class="kpi-value" id="kpi-active-accounts">5</h3>
+                        </div>
+                        <div class="kpi-icon accounts">
+                            <i data-lucide="wallet"></i>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-info">
+                            <span class="kpi-label">Total Transactions</span>
+                            <h3 class="kpi-value" id="kpi-transaction-count">0</h3>
+                        </div>
+                        <div class="kpi-icon transactions">
+                            <i data-lucide="arrow-right-left"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Layout -->
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>Distribution by Account</h3>
+                        <div class="chart-container">
+                            <canvas id="accountChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Monthly Tracking Trend</h3>
+                        <div class="chart-container">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Transactions Summary -->
+                <div class="table-card">
+                    <div class="card-header">
+                        <h3>Recent Transactions</h3>
+                        <button class="btn btn-text" onclick="switchTab('transactions')">View All</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Account</th>
+                                    <th>Recipient / Use</th>
+                                    <th>Amount (PKR)</th>
+                                    <th>Comment</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-transactions-tbody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Transactions -->
+            <section id="tab-transactions" class="tab-content">
+                <div class="filter-bar">
+                    <div class="search-input">
+                        <i data-lucide="search"></i>
+                        <input type="text" id="search-tx" placeholder="Search recipient or comment..." oninput="fetchTransactions()">
+                    </div>
+                    
+                    <div class="filter-select">
+                        <select id="filter-account" onchange="fetchTransactions()">
+                            <option value="">All Accounts</option>
+                            <option value="HBL (Muhammad Jahanzaib)">HBL (Muhammad Jahanzaib)</option>
+                            <option value="HBL (Sana Kanwal)">HBL (Sana Kanwal)</option>
+                            <option value="EasyPaisa">EasyPaisa</option>
+                            <option value="JazzCash">JazzCash</option>
+                            <option value="Cash">Cash</option>
+                        </select>
+                    </div>
+                    
+                    <div class="date-range">
+                        <input type="date" id="filter-start-date" onchange="fetchTransactions()">
+                        <span>to</span>
+                        <input type="date" id="filter-end-date" onchange="fetchTransactions()">
+                    </div>
+                    
+                    <button class="btn btn-icon btn-secondary" onclick="resetFilters()" title="Reset Filters">
+                        <i data-lucide="rotate-ccw"></i>
+                    </button>
+                </div>
+
+                <div class="table-card">
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Account</th>
+                                    <th>Recipient / Use</th>
+                                    <th>Amount (PKR)</th>
+                                    <th>Comment</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="all-transactions-tbody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Receipt Parser -->
+            <section id="tab-scanner" class="tab-content">
+                <div class="scanner-grid">
+                    <!-- Drop area -->
+                    <div class="scanner-card upload-zone" id="drop-zone">
+                        <i data-lucide="upload-cloud" class="upload-icon"></i>
+                        <h3>Upload Receipt Image</h3>
+                        <p>Drag and drop a PNG/JPEG screenshot here, or click to browse</p>
+                        <input type="file" id="file-input" accept="image/*" style="display:none">
+                        
+                        <div class="divider"><span>OR</span></div>
+                        
+                        <button class="btn btn-secondary btn-full" onclick="triggerClipboardParse()">
+                            <i data-lucide="clipboard"></i> Process System Clipboard
+                        </button>
+                    </div>
+
+                    <!-- Direct text statement input -->
+                    <div class="scanner-card">
+                        <h3>Paste Statement Text</h3>
+                        <p class="card-desc">Paste raw SMS notification, digital receipt description, or copy-pasted ledger logs below</p>
+                        <textarea id="paste-text-input" placeholder="Example: HBL: PKR 5,000.00 transferred to K-Electric on 2026-06-25. Ref ID: 12345."></textarea>
+                        <button class="btn btn-primary btn-full mt-2" onclick="triggerTextParse()">
+                            <i data-lucide="wand-2"></i> Parse with Gemini
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Preview of parsed transactions -->
+                <div class="table-card mt-3" id="parsed-preview-card" style="display: none;">
+                    <div class="card-header bg-gradient">
+                        <div>
+                            <h3>Gemini AI Extraction Preview</h3>
+                            <p class="subtitle text-light">Review and edit the extracted details before saving to local ledger</p>
+                        </div>
+                        <div class="actions">
+                            <button class="btn btn-secondary" onclick="cancelParsedPreview()">Cancel</button>
+                            <button class="btn btn-primary" onclick="commitParsedTransactions()">
+                                <i data-lucide="save"></i> Save all to Ledger
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Source Account</th>
+                                    <th>Recipient / Use</th>
+                                    <th>Amount (PKR)</th>
+                                    <th>Comment / Ref</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="parsed-preview-tbody">
+                                <!-- Populated dynamically with editable rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Statements / Reports -->
+            <section id="tab-reports" class="tab-content">
+                <div class="report-controls-card">
+                    <h3>Outbound Ledger Statement Generator</h3>
+                    <p class="card-desc">Generate aggregated structured markdown reports for copy-pasting to WhatsApp or Email</p>
+                    
+                    <div class="report-form">
+                        <div class="form-group">
+                            <label>Report Interval Type</label>
+                            <select id="report-interval" onchange="toggleReportIntervalInputs()">
+                                <option value="daily">Daily Statement</option>
+                                <option value="monthly" selected>Monthly Statement</option>
+                                <option value="custom">Custom Date Range</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group" id="report-date-container" style="display: none;">
+                            <label>Report Date</label>
+                            <input type="date" id="report-date" value="2026-06-25">
+                        </div>
+
+                        <div class="form-group" id="report-month-container">
+                            <label>Report Month</label>
+                            <input type="month" id="report-month" value="2026-06">
+                        </div>
+                        
+                        <div class="form-group" id="report-range-container" style="display: none;">
+                            <label>Date Range</label>
+                            <div class="flex-row">
+                                <input type="date" id="report-start-date">
+                                <span>to</span>
+                                <input type="date" id="report-end-date">
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary" onclick="generateReport()">
+                            <i data-lucide="file-heart"></i> Generate Report
+                        </button>
+                    </div>
+                </div>
+
+                <div class="report-preview-card mt-3" id="report-result-card" style="display: none;">
+                    <div class="card-header">
+                        <h3>Statement Preview</h3>
+                        <button class="btn btn-secondary" onclick="copyReportToClipboard()">
+                            <i data-lucide="copy"></i> Copy Markdown
+                        </button>
+                    </div>
+                    <pre class="report-output" id="report-output-text"></pre>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal: Add / Edit Transaction -->
+    <div class="modal-backdrop" id="tx-modal" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modal-title">Add Transaction</h3>
+                <button class="btn-close" onclick="closeTxModal()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="tx-form" onsubmit="saveTransaction(event)">
+                    <input type="hidden" id="tx-id-input">
+                    
+                    <div class="form-group">
+                        <label for="tx-date">Date *</label>
+                        <input type="date" id="tx-date" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tx-amount">Amount (PKR) *</label>
+                        <input type="number" step="0.01" id="tx-amount" required placeholder="0.00">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tx-account">Source Account *</label>
+                        <select id="tx-account" required>
+                            <option value="HBL (Muhammad Jahanzaib)">HBL (Muhammad Jahanzaib)</option>
+                            <option value="HBL (Sana Kanwal)">HBL (Sana Kanwal)</option>
+                            <option value="EasyPaisa">EasyPaisa</option>
+                            <option value="JazzCash">JazzCash</option>
+                            <option value="Cash">Cash</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tx-recipient">Recipient / Destination *</label>
+                        <input type="text" id="tx-recipient" required placeholder="e.g. K-Electric, Asif Ali, Cash">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tx-comment">Comment / Reference</label>
+                        <input type="text" id="tx-comment" placeholder="e.g. Bill Payment, Split transfer, etc.">
+                    </div>
+                    
+                    <div class="modal-footer mt-2">
+                        <button type="button" class="btn btn-secondary" onclick="closeTxModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Transaction</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div class="toast" id="toast">
+        <span id="toast-message">Message goes here</span>
+    </div>
+
+    <!-- Page Logic Script -->
+    <script src="/static/app.js"></script>
+    <script>
+        // Initialize lucide icons at load
+        lucide.createIcons();
+    </script>
+</body>
+</html>

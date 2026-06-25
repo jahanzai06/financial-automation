@@ -1,0 +1,23 @@
+# Database
+ledger.db
+
+# Environments
+.env
+
+# Logs
+*.log
+app.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# IDE / Editor configurations
+.vscode/
+.idea/
+.antigravity*
+artifacts/
+scratch/
