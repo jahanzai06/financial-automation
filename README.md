@@ -49,38 +49,35 @@ To access this application from your mobile phone even when your laptop is turne
 
 ---
 
-### Step 2: Deploy to Render (Option A - Free Tier)
+### Step 2: Create a Free PostgreSQL Database
 
-1. Go to [Render](https://render.com) and sign up/log in.
-2. Click **New** -> **Web Service**.
-3. Connect your GitHub account and select your repository.
-4. Set the following settings:
-   - **Environment**: `Docker` (it will automatically build using the included `Dockerfile`)
-   - **Region**: Select the closest region to you.
-5. In **Environment Variables** (under Advanced):
-   - Add Key: `GEMINI_API_KEY`, Value: *Your Gemini API Key*
-6. **Setting up Persistent Storage (Crucial so you don't lose data)**:
-   - Render's free tier has an ephemeral filesystem. If your service restarts, your SQLite database (`ledger.db`) resets.
-   - To prevent this, scroll down to **Disk** (in the advanced settings).
-   - Click **Add Disk**:
-     - **Name**: `ledger-db-disk`
-     - **Mount Path**: `/data`
-     - **Size**: `1 GiB` (more than enough for SQLite)
-   - Add another Environment Variable to redirect the database path to the disk:
-     - Add Key: `DATABASE_PATH`, Value: `/data/ledger.db`
-7. Click **Create Web Service**. Once deployed, Render will provide a public URL (e.g., `https://your-app.onrender.com`) that you can open on your phone!
+1. Sign up at [Neon.tech](https://neon.tech) or [Supabase.com](https://supabase.com) (both offer a generous 100% free database plan).
+2. Create a new project/database.
+3. Copy the database connection string (looks like `postgresql://user:password@host/dbname`).
 
 ---
 
-### Step 3: Deploy to Railway (Option B - Simple & Quick Setup)
+### Step 3: Deploy to Render (100% Free)
 
-1. Go to [Railway.app](https://railway.app) and sign up/log in.
+1. Go to [Render](https://render.com) and sign up/log in.
+2. Click **New** -> **Web Service**.
+3. Connect your GitHub account and select the `financial-automation` repository.
+4. Set the following settings:
+   - **Environment**: `Docker` (it will automatically build using the included `Dockerfile`)
+   - **Region**: Select the closest region to you.
+   - **Instance Type**: Select the **Free** tier.
+5. In **Environment Variables** (under Advanced):
+   - Add Key: `GEMINI_API_KEY`, Value: `your_actual_gemini_api_key`
+   - Add Key: `DATABASE_URL`, Value: `your_postgres_connection_string` (pasted from Step 2)
+6. Click **Deploy Web Service**. Once built, Render will give you a public URL (e.g., `https://your-app.onrender.com`) which you can open on your phone!
+
+---
+
+### Step 4: Deploy to Railway (Alternative Option)
+
+1. Go to [Railway.app](https://railway.app) and sign up.
 2. Click **New Project** -> **Deploy from GitHub repo** and select your repository.
-3. Once the service is created, go to **Variables**:
-   - Add `GEMINI_API_KEY` = *Your Gemini API Key*
-4. Go to **Settings** -> **Public Networking**:
-   - Click **Generate Domain** to get a public URL for your phone.
-5. **Setting up Persistent Storage**:
-   - Go to your project canvas, click **+ New** -> **Volume** (creates a persistent disk).
-   - Mount this Volume to your service at `/data`.
-   - Go to **Variables** and add: `DATABASE_PATH` = `/data/ledger.db`
+3. Go to the **Variables** tab and add:
+   - `GEMINI_API_KEY` = `your_actual_gemini_api_key`
+   - `DATABASE_URL` = `your_postgres_connection_string` (pasted from Step 2)
+4. Go to **Settings** -> **Public Networking** and click **Generate Domain** to get a public URL for your phone.
