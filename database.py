@@ -1,31 +1,72 @@
+import os
 import sqlite3
 from typing import List, Dict, Any, Optional
 from config import DB_PATH
 
+# Detect if we should use PostgreSQL (for cloud deployment)
+DATABASE_URL = os.getenv("DATABASE_URL")
+IS_POSTGRES = DATABASE_URL is not None and (DATABASE_URL.startswith("postgres://") or DATABASE_URL.startswith("postgresql://"))
+
+if IS_POSTGRES:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if IS_POSTGRES:
+        conn = psycopg2.connect(DATABASE_URL)
+        return conn
+    else:
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+def get_dict_cursor(conn):
+    if IS_POSTGRES:
+        return conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        return conn.cursor()
+
+def get_tuple_cursor(conn):
+    if IS_POSTGRES:
+        return conn.cursor()
+    else:
+        return conn.cursor()
+
+def execute_query(cursor, query, params=()):
+    if IS_POSTGRES:
+        # PostgreSQL uses %s placeholders instead of sqlite's ?
+        query = query.replace('?', '%s')
+    cursor.execute(query, params)
 
 def init_db():
     """Initializes the database schema if it doesn't already exist."""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_tuple_cursor(conn)
     
-    # Create the transactions table as per the spec
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL,
-            amount REAL NOT NULL,
-            source_account TEXT NOT NULL,
-            recipient_or_use TEXT,
-            comment TEXT
-        )
-    """)
-    
-    # Create index on date for rapid range queries
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions (date)")
+    if IS_POSTGRES:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id SERIAL PRIMARY KEY,
+                date TEXT NOT NULL,
+                amount DOUBLE PRECISION NOT NULL,
+                source_account TEXT NOT NULL,
+                recipient_or_use TEXT,
+                comment TEXT
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions (date)")
+    else:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                amount REAL NOT NULL,
+                source_account TEXT NOT NULL,
+                recipient_or_use TEXT,
+                comment TEXT
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions (date)")
     
     conn.commit()
     conn.close()
@@ -33,34 +74,54 @@ def init_db():
 def add_transaction(date: str, amount: float, source_account: str, recipient_or_use: str, comment: str) -> int:
     """Inserts a single transaction and returns its auto-incremented ID."""
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO transactions (date, amount, source_account, recipient_or_use, comment)
-        VALUES (?, ?, ?, ?, ?)
-    """, (date, amount, source_account, recipient_or_use, comment))
+    cursor = get_tuple_cursor(conn)
+    if IS_POSTGRES:
+        cursor.execute("""
+            INSERT INTO transactions (date, amount, source_account, recipient_or_use, comment)
+            VALUES (%s, %s, %s, %s, %s) RETURNING id
+        """, (date, amount, source_account, recipient_or_use, comment))
+        tx_id = cursor.fetchone()[0]
+    else:
+        cursor.execute("""
+            INSERT INTO transactions (date, amount, source_account, recipient_or_use, comment)
+            VALUES (?, ?, ?, ?, ?)
+        """, (date, amount, source_account, recipient_or_use, comment))
+        tx_id = cursor.lastrowid
     conn.commit()
-    tx_id = cursor.lastrowid
     conn.close()
     return tx_id
 
 def add_transactions(tx_list: List[Dict[str, Any]]) -> List[int]:
     """Inserts a batch of transactions inside a single DB transaction."""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_tuple_cursor(conn)
     ids = []
     try:
         for tx in tx_list:
-            cursor.execute("""
-                INSERT INTO transactions (date, amount, source_account, recipient_or_use, comment)
-                VALUES (?, ?, ?, ?, ?)
-            """, (
-                tx.get("date"),
-                tx.get("amount"),
-                tx.get("source_account"),
-                tx.get("recipient_or_use") or tx.get("recipient"),
-                tx.get("comment")
-            ))
-            ids.append(cursor.lastrowid)
+            if IS_POSTGRES:
+                cursor.execute("""
+                    INSERT INTO transactions (date, amount, source_account, recipient_or_use, comment)
+                    VALUES (%s, %s, %s, %s, %s) RETURNING id
+                """, (
+                    tx.get("date"),
+                    tx.get("amount"),
+                    tx.get("source_account"),
+                    tx.get("recipient_or_use") or tx.get("recipient"),
+                    tx.get("comment")
+                ))
+                ids.append(cursor.fetchone()[0])
+            else:
+                cursor.execute("""
+                    INSERT INTO transactions (date, amount, source_account, recipient_or_use, comment)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    tx.get("date"),
+                    tx.get("amount"),
+                    tx.get("source_account"),
+                    tx.get("recipient_or_use") or tx.get("recipient"),
+                    tx.get("comment")
+                ))
+                ids.append(cursor.lastrowid)
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -77,7 +138,7 @@ def get_transactions(
 ) -> List[Dict[str, Any]]:
     """Retrieves list of transactions matching specified filters."""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_dict_cursor(conn)
     
     query = "SELECT * FROM transactions WHERE 1=1"
     params = []
@@ -98,7 +159,7 @@ def get_transactions(
         
     query += " ORDER BY date DESC, id DESC"
     
-    cursor.execute(query, params)
+    execute_query(cursor, query, params)
     rows = cursor.fetchall()
     conn.close()
     
@@ -107,8 +168,8 @@ def get_transactions(
 def delete_transaction(tx_id: int) -> bool:
     """Deletes a transaction by ID."""
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
+    cursor = get_tuple_cursor(conn)
+    execute_query(cursor, "DELETE FROM transactions WHERE id = ?", (tx_id,))
     conn.commit()
     rows_affected = cursor.rowcount
     conn.close()
@@ -120,7 +181,7 @@ def update_transaction(tx_id: int, updates: Dict[str, Any]) -> bool:
         return False
     
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_tuple_cursor(conn)
     
     fields = []
     params = []
@@ -135,7 +196,7 @@ def update_transaction(tx_id: int, updates: Dict[str, Any]) -> bool:
         
     params.append(tx_id)
     query = f"UPDATE transactions SET {', '.join(fields)} WHERE id = ?"
-    cursor.execute(query, params)
+    execute_query(cursor, query, params)
     conn.commit()
     rows_affected = cursor.rowcount
     conn.close()
@@ -144,7 +205,7 @@ def update_transaction(tx_id: int, updates: Dict[str, Any]) -> bool:
 def get_stats() -> Dict[str, Any]:
     """Generates analytics data (totals by account, monthly summaries)."""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = get_tuple_cursor(conn)
     
     # 1. Total Volume
     cursor.execute("SELECT SUM(amount) FROM transactions")
