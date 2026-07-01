@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: financial-automation
+    runtime: docker
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
